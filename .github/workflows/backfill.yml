@@ -1,0 +1,171 @@
+name: Backfill Transcripts
+
+on:
+  workflow_dispatch:
+    inputs:
+      batch_size:
+        description: 'Episodes per run'
+        default: '10'
+        type: string
+      max_age_days:
+        description: 'Max age in days (180 = 6 months)'
+        default: '180'
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install faster-whisper feedparser
+      
+      - name: Backfill transcripts
+        run: |
+          python << 'EOF'
+          import feedparser
+          import json
+          import os
+          import re
+          import urllib.request
+          from pathlib import Path
+          from datetime import datetime, timedelta
+          from email.utils import parsedate_to_datetime
+          
+          RSS_URL = 'https://thedailygwei.libsyn.com/rss'
+          TRANSCRIPTS_DIR = Path('transcripts')
+          MANIFEST_PATH = TRANSCRIPTS_DIR / 'manifest.json'
+          BATCH_SIZE = int('${{ inputs.batch_size }}')
+          MAX_AGE_DAYS = int('${{ inputs.max_age_days }}')
+          
+          cutoff_date = datetime.now() - timedelta(days=MAX_AGE_DAYS)
+          
+          def sanitize_filename(title):
+              safe = re.sub(r'[^a-zA-Z0-9\s\-]', '', title)
+              safe = re.sub(r'\s+', '-', safe)
+              return safe[:80].lower().strip('-')
+          
+          def parse_date(date_str):
+              try:
+                  dt = parsedate_to_datetime(date_str)
+                  return dt.strftime("%Y-%m-%d"), dt
+              except:
+                  return "unknown", None
+          
+          # Load manifest
+          manifest = {}
+          if MANIFEST_PATH.exists():
+              manifest = json.loads(MANIFEST_PATH.read_text())
+          
+          # Parse RSS
+          print("Fetching RSS feed...")
+          feed = feedparser.parse(RSS_URL)
+          
+          to_process = []
+          for entry in feed.entries:
+              title = entry.title
+              key = sanitize_filename(title)
+              
+              if key in manifest:
+                  continue
+              
+              date_str, pub_date = parse_date(entry.get('published', ''))
+              if pub_date and pub_date.replace(tzinfo=None) < cutoff_date:
+                  continue
+              
+              # Find audio URL
+              audio_url = None
+              for link in entry.get('links', []):
+                  if link.get('type', '').startswith('audio/'):
+                      audio_url = link.get('href')
+                      break
+              
+              if not audio_url and hasattr(entry, 'enclosures'):
+                  for enc in entry.enclosures:
+                      if enc.get('type', '').startswith('audio/'):
+                          audio_url = enc.get('href')
+                          break
+              
+              if audio_url:
+                  to_process.append({
+                      'title': title,
+                      'key': key,
+                      'date': date_str,
+                      'audio_url': audio_url
+                  })
+          
+          print(f"Found {len(to_process)} episodes to process")
+          to_process = to_process[:BATCH_SIZE]
+          
+          if not to_process:
+              print("Nothing to process!")
+              exit(0)
+          
+          print(f"Processing {len(to_process)} episodes this run...")
+          from faster_whisper import WhisperModel
+          model = WhisperModel("small", device="cpu", compute_type="int8")
+          
+          for i, ep in enumerate(to_process):
+              print(f"\n[{i+1}/{len(to_process)}] {ep['title'][:60]}...")
+              
+              audio_path = Path(f"/tmp/{ep['key']}.mp3")
+              print(f"  Downloading...")
+              urllib.request.urlretrieve(ep['audio_url'], audio_path)
+              print(f"  Downloaded: {audio_path.stat().st_size / 1024 / 1024:.1f}MB")
+              
+              print(f"  Transcribing...")
+              segments, info = model.transcribe(str(audio_path), beam_size=5)
+              transcript = ' '.join([seg.text.strip() for seg in segments])
+              print(f"  Done: {len(transcript)} chars")
+              
+              filename = f"{ep['date']}-{ep['key']}.md"
+              output_path = TRANSCRIPTS_DIR / filename
+              
+              content = f"""# {ep['title']}
+
+          **Date:** {ep['date']}
+          **Source:** Transcribed with faster-whisper (small model)
+
+          ---
+
+          {transcript}
+          """
+              
+              output_path.write_text(content)
+              manifest[ep['key']] = {
+                  'title': ep['title'],
+                  'date': ep['date'],
+                  'file': filename,
+                  'transcribed': datetime.now().isoformat()
+              }
+              
+              audio_path.unlink(missing_ok=True)
+          
+          MANIFEST_PATH.write_text(json.dumps(manifest, indent=2, sort_keys=True))
+          remaining = len([e for e in feed.entries if sanitize_filename(e.title) not in manifest])
+          print(f"\nDone! {remaining} episodes remaining.")
+          EOF
+      
+      - name: Commit and push
+        run: |
+          git config user.name "nixoassistant"
+          git config user.email "nixoassistant@users.noreply.github.com"
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "backfill: $(date -u +%Y-%m-%d)"
+            git push
+          fi
