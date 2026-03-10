@@ -158,6 +158,9 @@ jobs:
           print(f"\nDone! {remaining} episodes remaining.")
           EOF
       
+      - name: Post-process with ETH dictionary
+        run: python3 postprocess.py
+      
       - name: Commit and push
         run: |
           git config user.name "nixoassistant"
