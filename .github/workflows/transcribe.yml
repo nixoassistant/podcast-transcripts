@@ -153,6 +153,11 @@ jobs:
       - name: Post-process with ETH dictionary
         run: python3 postprocess.py
       
+      - name: Format paragraphs with LLM
+        env:
+          EFAI_API_KEY: ${{ secrets.EFAI_API_KEY }}
+        run: python3 format_paragraphs.py
+      
       - name: Commit and push if changed
         run: |
           git config user.name "nixoassistant"
