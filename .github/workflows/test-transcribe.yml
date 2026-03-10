@@ -38,7 +38,9 @@ jobs:
           audio_path = Path("/tmp/test_episode.mp3")
           
           print(f"Downloading: {audio_url}")
-          urllib.request.urlretrieve(audio_url, audio_path)
+          req = urllib.request.Request(audio_url, headers={'User-Agent': 'Mozilla/5.0 (compatible; podcast-transcripts/1.0)'})
+          with urllib.request.urlopen(req) as response, open(audio_path, 'wb') as out:
+              out.write(response.read())
           print(f"Downloaded: {audio_path.stat().st_size / 1024 / 1024:.1f}MB")
           
           print("\nLoading medium model...")
@@ -48,7 +50,7 @@ jobs:
           segments, info = model.transcribe(
               str(audio_path),
               beam_size=5,
-              initial_prompt="The Daily Gwei Refuel with Anthony Sassano covering Ethereum ecosystem news. Topics include Vitalik Buterin, FOCIL, PeerDAS, EPBS, Glamsterdam, Hegota, EIPs, Layer 2, DeFi, MEV, ZK proofs, Rocket Pool, and the Ethereum Foundation."
+              initial_prompt="Ethereum podcast discussing blockchain technology. Topics include Vitalik Buterin, ZK EVM, FOCIL, PeerDAS, EPBS, EIPs, Layer 2, DeFi, MEV, ZK proofs, Ansgar Dietrichs, David Hoffman, Ryan Sean Adams, and the Ethereum Foundation."
           )
           
           transcript = ' '.join([seg.text.strip() for seg in segments])
