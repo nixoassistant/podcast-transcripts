@@ -1,0 +1,206 @@
+name: Transcribe Selective Episode
+
+on:
+  workflow_dispatch:
+    inputs:
+      podcast:
+        description: 'Podcast key (e.g., bankless)'
+        required: true
+        type: string
+      episode_url:
+        description: 'Direct audio URL or leave empty to use latest from RSS'
+        required: false
+        type: string
+      episode_title:
+        description: 'Episode title (optional, will fetch from RSS if empty)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  transcribe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install faster-whisper feedparser
+      
+      - name: Transcribe episode
+        run: |
+          python << 'EOF'
+          import feedparser
+          import json
+          import os
+          import re
+          import urllib.request
+          from pathlib import Path
+          from datetime import datetime
+          
+          # Load podcast config
+          config = json.loads(Path('podcasts.json').read_text())
+          podcast_key = '${{ inputs.podcast }}'
+          episode_url = '${{ inputs.episode_url }}'.strip() or None
+          episode_title = '${{ inputs.episode_title }}'.strip() or None
+          
+          if podcast_key not in config['podcasts']:
+              print(f"ERROR: Unknown podcast '{podcast_key}'")
+              print(f"Available: {list(config['podcasts'].keys())}")
+              exit(1)
+          
+          podcast = config['podcasts'][podcast_key]
+          print(f"Podcast: {podcast['name']}")
+          print(f"Mode: {podcast['mode']}")
+          
+          output_dir = Path(podcast['output_dir'])
+          output_dir.mkdir(parents=True, exist_ok=True)
+          manifest_path = output_dir / 'manifest.json'
+          
+          # Load manifest
+          manifest = {}
+          if manifest_path.exists():
+              manifest = json.loads(manifest_path.read_text())
+          
+          def sanitize_filename(title):
+              safe = re.sub(r'[^a-zA-Z0-9\s\-]', '', title)
+              safe = re.sub(r'\s+', '-', safe)
+              return safe[:80].lower().strip('-')
+          
+          def parse_date(date_str):
+              try:
+                  from email.utils import parsedate_to_datetime
+                  dt = parsedate_to_datetime(date_str)
+                  return dt.strftime("%Y-%m-%d")
+              except:
+                  return datetime.now().strftime("%Y-%m-%d")
+          
+          # If no URL provided, get latest from RSS
+          if not episode_url:
+              print(f"Fetching RSS: {podcast['rss']}")
+              req = urllib.request.Request(podcast['rss'], headers={'User-Agent': 'Mozilla/5.0'})
+              feed = feedparser.parse(urllib.request.urlopen(req, timeout=30).read())
+              
+              if not feed.entries:
+                  print("ERROR: No episodes found in RSS")
+                  exit(1)
+              
+              entry = feed.entries[0]
+              episode_title = episode_title or entry.title
+              
+              # Find audio URL
+              for link in entry.get('links', []):
+                  if link.get('type', '').startswith('audio/'):
+                      episode_url = link.get('href')
+                      break
+              if not episode_url and hasattr(entry, 'enclosures'):
+                  for enc in entry.enclosures:
+                      if enc.get('type', '').startswith('audio/'):
+                          episode_url = enc.get('href')
+                          break
+              
+              episode_date = parse_date(entry.get('published', ''))
+          else:
+              episode_date = datetime.now().strftime("%Y-%m-%d")
+              episode_title = episode_title or f"Episode {episode_date}"
+          
+          if not episode_url:
+              print("ERROR: Could not find audio URL")
+              exit(1)
+          
+          key = sanitize_filename(episode_title)
+          print(f"Title: {episode_title}")
+          print(f"Key: {key}")
+          print(f"Audio: {episode_url[:100]}...")
+          
+          # Check if already transcribed
+          if key in manifest:
+              print(f"Already transcribed: {manifest[key].get('file')}")
+              exit(0)
+          
+          # Download audio
+          print("Downloading audio...")
+          audio_path = Path(f"/tmp/{key}.mp3")
+          req = urllib.request.Request(episode_url, headers={'User-Agent': 'Mozilla/5.0'})
+          with urllib.request.urlopen(req, timeout=300) as resp:
+              audio_path.write_bytes(resp.read())
+          print(f"Downloaded: {audio_path.stat().st_size / 1024 / 1024:.1f}MB")
+          
+          # Transcribe
+          print("Loading whisper model (medium)...")
+          from faster_whisper import WhisperModel
+          model = WhisperModel("medium", device="cpu", compute_type="int8")
+          
+          print("Transcribing...")
+          segments, info = model.transcribe(
+              str(audio_path),
+              beam_size=5,
+              initial_prompt=podcast['initial_prompt']
+          )
+          transcript = ' '.join([seg.text.strip() for seg in segments])
+          print(f"Transcribed: {len(transcript)} chars")
+          
+          # Save
+          filename = f"{episode_date}-{key}.md"
+          output_path = output_dir / filename
+          
+          content = f"""# {episode_title}
+
+          **Date:** {episode_date}
+          **Podcast:** {podcast['name']}
+          **Source:** Transcribed with faster-whisper (medium model)
+
+          ---
+
+          {transcript}
+          """
+          
+          output_path.write_text(content)
+          print(f"Saved: {output_path}")
+          
+          # Update manifest
+          manifest[key] = {
+              'title': episode_title,
+              'date': episode_date,
+              'file': filename,
+              'transcribed': datetime.now().isoformat()
+          }
+          manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True))
+          
+          # Cleanup
+          audio_path.unlink(missing_ok=True)
+          print("Done!")
+          EOF
+      
+      - name: Post-process with ETH dictionary
+        run: |
+          PODCAST='${{ inputs.podcast }}'
+          python3 postprocess.py "transcripts/${PODCAST}/"*.md || true
+      
+      - name: Format paragraphs with LLM
+        env:
+          EFAI_API_KEY: ${{ secrets.EFAI_API_KEY }}
+        run: |
+          PODCAST='${{ inputs.podcast }}'
+          python3 format_paragraphs.py "transcripts/${PODCAST}/"*.md || true
+      
+      - name: Commit and push
+        run: |
+          git config user.name "nixoassistant"
+          git config user.email "nixoassistant@users.noreply.github.com"
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "transcribe(${{ inputs.podcast }}): $(date -u +%Y-%m-%d)"
+            git push
+          fi

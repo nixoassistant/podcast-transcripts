@@ -1,0 +1,22 @@
+{
+  "description": "Podcast transcription configuration",
+  "version": "1.0.0",
+  "podcasts": {
+    "daily-gwei": {
+      "name": "The Daily Gwei Refuel",
+      "rss": "https://thedailygwei.libsyn.com/rss",
+      "mode": "all",
+      "schedule": "daily",
+      "initial_prompt": "The Daily Gwei Refuel with Anthony Sassano covering Ethereum ecosystem news. Topics include Vitalik Buterin, FOCIL, PeerDAS, ePBS, Glamsterdam, Hegotá, EIPs, Layer 2, DeFi, MEV, ZK proofs, Rocket Pool, and the Ethereum Foundation.",
+      "output_dir": "transcripts/daily-gwei"
+    },
+    "bankless": {
+      "name": "Bankless",
+      "rss": "https://feeds.flightcast.com/p83fuj0y0u58o82l41xei7zo.xml",
+      "mode": "selective",
+      "schedule": "manual",
+      "initial_prompt": "Bankless podcast with David Hoffman and Ryan Sean Adams discussing Ethereum, DeFi, and crypto. Guests include Ethereum researchers and developers like Vitalik Buterin, Justin Drake, Ansgar Dietrichs, and others discussing protocol upgrades, ZK-EVM, rollups, and blockchain governance.",
+      "output_dir": "transcripts/bankless"
+    }
+  }
+}
