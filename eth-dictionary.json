@@ -1,6 +1,6 @@
 {
   "description": "Ethereum terminology - transcription corrections, acronyms, and proper nouns",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "updated": "2026-03-10",
   "corrections": {
     "case_sensitive": {
@@ -16,6 +16,16 @@
       "delgado": "Daily Gwei",
       "deligay": "Daily Gwei",
       "andy sarno": "Anthony Sassano",
+      "ian desassano": "Anthony Sassano",
+      "desassano": "Sassano",
+      "tomas": "Tomasz",
+      "banquist nation": "Bankless Nation",
+      "banquist": "Bankless",
+      "ansgar barnaby": "Ansgar, Barnabé",
+      "hegelta": "Hegotá",
+      "hegoter": "Hegotá",
+      "through the maker system": "Ethereum ecosystem",
+      "through the maker": "Ethereum",
       "pirdas": "PeerDAS",
       "peer dash": "PeerDAS",
       "peer-dash": "PeerDAS",
