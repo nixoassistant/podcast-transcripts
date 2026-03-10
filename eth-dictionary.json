@@ -1,0 +1,73 @@
+{
+  "description": "Ethereum terminology corrections for whisper transcriptions",
+  "version": "1.0.0",
+  "corrections": {
+    "case_sensitive": {
+      "Fossil": "FOCIL",
+      "fossil": "FOCIL",
+      "Faucil": "FOCIL",
+      "faucil": "FOCIL"
+    },
+    "case_insensitive": {
+      "battalio": "Vitalik Buterin",
+      "vitella": "Vitalik",
+      "deligueri": "Daily Gwei",
+      "delgado": "Daily Gwei",
+      "deligay": "Daily Gwei",
+      "andy sarno": "Anthony Sassano",
+      "pirdas": "PeerDAS",
+      "peer dash": "PeerDAS",
+      "peer-dash": "PeerDAS",
+      "rockerpool": "Rocket Pool",
+      "dow": "DAO",
+      "lamsteadam": "Glamsterdam",
+      "glamstone m": "Glamsterdam",
+      "hegeltar": "Hegota",
+      "hegotar": "Hegota",
+      "hegletuff": "Hegota"
+    },
+    "context_aware": {
+      "forecast": {
+        "pattern": "forecast (website|site|team)",
+        "replacement": "Forkcast"
+      },
+      "forecasts": {
+        "pattern": "forecasts (website|site)",
+        "replacement": "Forkcast"
+      }
+    }
+  },
+  "proper_nouns": {
+    "people": [
+      "Vitalik Buterin",
+      "Anthony Sassano",
+      "Justin Drake",
+      "Ansgar Dietrichs",
+      "Tim Beiko",
+      "Alex Stokes",
+      "Tomasz Stańczak",
+      "Ben Edgington",
+      "Carl Beekhuizen"
+    ],
+    "protocols": [
+      "FOCIL",
+      "EPBS",
+      "PeerDAS",
+      "EIP-4844",
+      "MaxEB",
+      "Rocket Pool",
+      "Lido"
+    ],
+    "forks": [
+      "Glamsterdam",
+      "Hegota",
+      "Pectra",
+      "Dencun"
+    ],
+    "websites": [
+      "Forkcast",
+      "L2Beat",
+      "strawmap.org"
+    ]
+  }
+}
